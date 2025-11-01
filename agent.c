@@ -84,6 +84,13 @@ int process_agent(const char* task) {
             agent.messages[agent.msg_count].content[MAX_CONTENT - 1] = '\0';
             agent.msg_count++;
         }
+    } else {
+        char error_msg[MAX_CONTENT];
+        if (json_error(resp, error_msg, sizeof(error_msg))) {
+            printf("\033[31mError: %s\033[0m\n", error_msg);
+        } else {
+            printf("\033[31mError: Invalid API response\033[0m\n");
+        }
     }
 
     return 0;

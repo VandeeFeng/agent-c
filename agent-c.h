@@ -31,6 +31,7 @@ typedef struct {
 
 char* json_request(const Agent* agent, const Config* config, char* out, size_t size);
 char* json_content(const char* response, char* out, size_t size);
+char* json_error(const char* response, char* out, size_t size);
 int http_request(const char* req, char* resp, size_t resp_size);
 int extract_command(const char* response, char* cmd, size_t cmd_size);
 

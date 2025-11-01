@@ -53,7 +53,7 @@ char* json_request(const Agent* agent, const Config* config, char* out, size_t s
         if (!strcmp(msg->role, "tool")) {
             snprintf(temp, sizeof(temp), "{\"role\":\"tool\",\"content\":\"%s\"}", msg->content);
         } else {
-            snprintf(temp, sizeof(temp), "{\"role\":\"%s\",\"content\":\"%s\"}", 
+            snprintf(temp, sizeof(temp), "{\"role\":\"%s\",\"content\":\"%s\"}",
                      msg->role, msg->content);
         }
         if (strlen(messages) + strlen(temp) + 10 < sizeof(messages)) strcat(messages, temp);
@@ -78,6 +78,13 @@ char* json_content(const char* response, char* out, size_t size) {
     const char* message = strstr(choices, "\"message\":");
     if (!message) return NULL;
     return json_find(message, "content", out, size);
+}
+
+char* json_error(const char* response, char* out, size_t size) {
+    if (!response || !out) return NULL;
+    const char* error = strstr(response, "\"error\":");
+    if (!error) return NULL;
+    return json_find(error, "message", out, size);
 }
 
 int extract_command(const char* response, char* cmd, size_t cmd_size) {
