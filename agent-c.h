@@ -11,21 +11,22 @@
 #define MAX_BUFFER 8192
 #define MAX_CONTENT 4096
 
-typedef struct { 
-    char role[12]; 
-    char content[MAX_CONTENT]; 
+typedef struct {
+    char role[12];
+    char content[MAX_CONTENT];
 } Message;
 
-typedef struct { 
-    char model[64]; 
-    float temp; 
-    int max_tokens; 
-    char api_key[128]; 
+typedef struct {
+    char model[64];
+    float temp;
+    int max_tokens;
+    char api_key[128];
+    char base_url[256];
 } Config;
 
-typedef struct { 
-    Message messages[MAX_MESSAGES]; 
-    int msg_count; 
+typedef struct {
+    Message messages[MAX_MESSAGES];
+    int msg_count;
 } Agent;
 
 char* json_request(const Agent* agent, const Config* config, char* out, size_t size);

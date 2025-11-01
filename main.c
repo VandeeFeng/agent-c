@@ -11,16 +11,16 @@ void cleanup(int sig) {
 int main(void) {
     signal(SIGINT, cleanup);
     signal(SIGTERM, cleanup);
-    
+
     load_config();
-    
+
     if (!config.api_key[0]) {
-        fprintf(stderr, "OR_KEY required\n");
+        fprintf(stderr, "AGENTC_API_KEY required\n");
         return 1;
     }
-    
+
     init_agent();
     run_cli();
-    
+
     return 0;
 }

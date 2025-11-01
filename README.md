@@ -33,10 +33,22 @@ The build system auto-detects your platform and applies optimal compression:
 
 ### Setup
 
-Set your OpenRouter API key:
+Set your API key:
 
 ```bash
-export OR_KEY=your_openrouter_api_key_here
+export AGENTC_API_KEY=your_api_key_here
+```
+
+**Optional**: Set a custom API endpoint (defaults to OpenRouter):
+
+```bash
+export AGENTC_BASE_URL=https://your-custom-api.com/v1/chat/completions
+```
+
+**Optional**: Set a custom model (defaults to qwen/qwen3-coder):
+
+```bash
+export AGENTC_MODEL=your_custom_model
 ```
 
 ### Run
