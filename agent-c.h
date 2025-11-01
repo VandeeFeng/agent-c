@@ -22,6 +22,9 @@ typedef struct {
     int max_tokens;
     char api_key[128];
     char base_url[256];
+    char op_providers[256];
+    char op_providers_json[512];
+    int op_providers_on;
 } Config;
 
 typedef struct {

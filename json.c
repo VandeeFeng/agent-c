@@ -60,13 +60,13 @@ char* json_request(const Agent* agent, const Config* config, char* out, size_t s
     }
     strcat(messages, "]");
 
-    const char* template = "{\"model\":\"%s\",\"messages\":%s,\"temperature\":%.1f,\"max_tokens\":%d,\"stream\":false,"
+    snprintf(out, size,
+        "{\"model\":\"%s\",\"messages\":%s,\"temperature\":%.1f,\"max_tokens\":%d,\"stream\":false,"
         "\"tool_choice\":\"auto\","
         "\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"execute_command\","
         "\"description\":\"Execute shell command\",\"parameters\":{\"type\":\"object\",\"properties\":{\"command\":{\"type\":\"string\"}},"
-        "\"required\":[\"command\"]}}}],"
-        "\"provider\":{\"only\":[\"cerebras\"]}}";
-    snprintf(out, size, template, config->model, messages, config->temp, config->max_tokens);
+        "\"required\":[\"command\"]}}}]%s}",
+        config->model, messages, config->temp, config->max_tokens, config->op_providers_json);
 
     return out;
 }
