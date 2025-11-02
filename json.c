@@ -1,6 +1,30 @@
 #include "agent-c.h"
 #include <cjson/cJSON.h>
 
+static void add_message_to_json(cJSON *messages, const Message *msg) {
+    cJSON *message = cJSON_CreateObject();
+    cJSON_AddStringToObject(message, "role", msg->role);
+
+    if (strcmp(msg->role, "tool") == 0) {
+        cJSON_AddStringToObject(message, "content", msg->content);
+        cJSON *tc = cJSON_Parse(msg->tool_calls);
+        if (tc) {
+            cJSON *id = cJSON_GetObjectItem(cJSON_GetArrayItem(tc, 0), "id");
+            if (cJSON_IsString(id)) {
+                cJSON_AddStringToObject(message, "tool_call_id", id->valuestring);
+            }
+            cJSON_Delete(tc);
+        }
+    } else if (strcmp(msg->role, "assistant") == 0 && msg->tool_calls[0]) {
+        cJSON_AddItemToObject(message, "content",
+            msg->content[0] ? cJSON_CreateString(msg->content) : cJSON_CreateNull());
+        cJSON_AddItemToObject(message, "tool_calls", cJSON_Parse(msg->tool_calls));
+    } else {
+        cJSON_AddStringToObject(message, "content", msg->content);
+    }
+    cJSON_AddItemToArray(messages, message);
+}
+
 char* json_request(const Agent* agent, const Config* config, char* out, size_t size) {
     if (!agent || !out) return NULL;
 
@@ -8,66 +32,32 @@ char* json_request(const Agent* agent, const Config* config, char* out, size_t s
     cJSON_AddStringToObject(root, "model", config->model);
     cJSON_AddNumberToObject(root, "temperature", config->temp);
     cJSON_AddNumberToObject(root, "max_tokens", config->max_tokens);
-    cJSON_AddFalseToObject(root, "stream");
+    cJSON_AddBoolToObject(root, "stream", 0);
     cJSON_AddStringToObject(root, "tool_choice", "auto");
 
-    cJSON *tools = cJSON_CreateArray();
-    cJSON *tool = cJSON_CreateObject();
-    cJSON_AddStringToObject(tool, "type", "function");
-    cJSON *function = cJSON_CreateObject();
-    cJSON_AddStringToObject(function, "name", "execute_command");
-    cJSON_AddStringToObject(function, "description", "Execute shell command");
-    cJSON *parameters = cJSON_CreateObject();
-    cJSON_AddStringToObject(parameters, "type", "object");
-    cJSON *properties = cJSON_CreateObject();
-    cJSON *command = cJSON_CreateObject();
-    cJSON_AddStringToObject(command, "type", "string");
-    cJSON_AddItemToObject(properties, "command", command);
-    cJSON_AddItemToObject(parameters, "properties", properties);
-    cJSON *required = cJSON_CreateStringArray((const char*[]){"command"}, 1);
-    cJSON_AddItemToObject(parameters, "required", required);
-    cJSON_AddItemToObject(function, "parameters", parameters);
-    cJSON_AddItemToObject(tool, "function", function);
-    cJSON_AddItemToArray(tools, tool);
-    cJSON_AddItemToObject(root, "tools", tools);
+    const char* tool_json_str =
+        "[{\"type\":\"function\",\"function\":{\"name\":\"execute_command\","
+        "\"description\":\"Execute shell command\",\"parameters\":{\"type\":\"object\","
+        "\"properties\":{\"command\":{\"type\":\"string\"}},\"required\":[\"command\"]}}}]";
+    cJSON_AddItemToObject(root, "tools", cJSON_Parse(tool_json_str));
 
     cJSON *messages = cJSON_CreateArray();
     for (int i = 0; i < agent->msg_count; i++) {
-        const Message* msg = &agent->messages[i];
-        cJSON *message = cJSON_CreateObject();
-        cJSON_AddStringToObject(message, "role", msg->role);
-
-        if (strcmp(msg->role, "tool") == 0) {
-            cJSON_AddStringToObject(message, "content", msg->content);
-            cJSON* tool_calls = cJSON_Parse(msg->tool_calls);
-            cJSON* first_tool_call = cJSON_GetArrayItem(tool_calls, 0);
-            cJSON* tool_call_id = cJSON_GetObjectItem(first_tool_call, "id");
-            if (cJSON_IsString(tool_call_id)) {
-                cJSON_AddStringToObject(message, "tool_call_id", tool_call_id->valuestring);
-            }
-            cJSON_Delete(tool_calls);
-        } else if (strcmp(msg->role, "assistant") == 0 && strlen(msg->tool_calls) > 0) {
-            if (strlen(msg->content) > 0) {
-                cJSON_AddStringToObject(message, "content", msg->content);
-            } else {
-                cJSON_AddNullToObject(message, "content");
-            }
-            cJSON* tool_calls_json = cJSON_Parse(msg->tool_calls);
-            cJSON_AddItemToObject(message, "tool_calls", tool_calls_json);
-        } else {
-            cJSON_AddStringToObject(message, "content", msg->content);
-        }
-
-        cJSON_AddItemToArray(messages, message);
+        add_message_to_json(messages, &agent->messages[i]);
     }
     cJSON_AddItemToObject(root, "messages", messages);
 
-    if (config->op_providers_on && strlen(config->op_providers_json) > 0) {
-        cJSON* providers_json = cJSON_Parse(config->op_providers_json);
-        cJSON_AddItemToObject(root, "optional_providers", providers_json);
+    if (config->op_providers_on && config->op_providers_json[0]) {
+        cJSON_AddItemToObject(root, "optional_providers", cJSON_Parse(config->op_providers_json));
     }
 
     char* json_string = cJSON_PrintUnformatted(root);
+    if (!json_string) {
+        cJSON_Delete(root);
+        out[0] = '\0';
+        return NULL;
+    }
+
     strncpy(out, json_string, size - 1);
     out[size - 1] = '\0';
 
@@ -80,12 +70,31 @@ char* json_request(const Agent* agent, const Config* config, char* out, size_t s
 static char* get_json_string(cJSON* obj, const char* key, char* out, size_t size) {
     if (!obj || !out) return NULL;
     cJSON* item = cJSON_GetObjectItem(obj, key);
-    if (cJSON_IsString(item) && (item->valuestring != NULL)) {
-        strncpy(out, item->valuestring, size - 1);
-        out[size - 1] = '\0';
-        return out;
+    if (!cJSON_IsString(item) || !item->valuestring) return NULL;
+
+    static const struct { char esc; char real; } esc_map[] = {
+        {'n', '\n'}, {'t', '\t'}, {'r', '\r'}, {'\\', '\\'}, {'"', '"'}, {'\'', '\''}
+    };
+
+    char *dst = out;
+    for (const char *src = item->valuestring; *src && dst < out + size - 1;) {
+        if (*src == '\\' && *(src + 1)) {
+            int found = 0;
+            for (size_t i = 0; i < sizeof(esc_map)/sizeof(esc_map[0]); i++) {
+                if (*(src + 1) == esc_map[i].esc) {
+                    *dst++ = esc_map[i].real;
+                    src += 2;
+                    found = 1;
+                    break;
+                }
+            }
+            if (!found) *dst++ = *src++;
+        } else {
+            *dst++ = *src++;
+        }
     }
-    return NULL;
+    *dst = '\0';
+    return out;
 }
 
 char* json_content(const char* response, char* out, size_t size) {
