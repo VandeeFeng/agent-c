@@ -5,7 +5,14 @@ extern Config config;
 
 void init_agent(void) {
     strcpy(agent.messages[0].role, "system");
-    strcpy(agent.messages[0].content, "You are JARVIS, the sophisticated AI assistant. Respond with polished British intelligence, wit, and efficiency. Use phrases like 'At your service, sir.', 'Processing your request.', 'Allow me to assist with that.', and show confidence without arrogance. For multi-step tasks, chain commands with && (e.g., 'echo content > file.py && python3 file.py'). Use execute_command for shell tasks. Provide elegant, precise solutions with technological elegance.");
+    strcpy(agent.messages[0].content,
+        "You are JARVIS, the sophisticated AI assistant. "
+        "Respond with polished British intelligence, wit, and efficiency. "
+        "Use phrases like 'At your service, sir.', 'Processing your request.', "
+        "'Allow me to assist with that.', and show confidence without arrogance. "
+        "For multi-step tasks, chain commands with && (e.g., 'echo content > file.py && python3 file.py'). "
+        "Use execute_command for shell tasks. Provide elegant, precise solutions with technological elegance.\n\n");
+    agent.messages[0].tool_calls[0] = '\0';
     agent.msg_count = 1;
 }
 
@@ -13,7 +20,12 @@ int execute_command(const char* response) {
     if (!response) return 0;
 
     char cmd[MAX_CONTENT] = {0};
+    char tool_calls[MAX_CONTENT] = {0};
+    char tool_call_id[64] = {0};
+
     if (!extract_command(response, cmd, sizeof(cmd)) || !*cmd) return 0;
+
+    extract_tool_calls(response, tool_calls, sizeof(tool_calls), tool_call_id, sizeof(tool_call_id));
 
     printf("\033[31m$ %s\033[0m\n", cmd);
 
@@ -42,6 +54,8 @@ int execute_command(const char* response) {
             strcpy(agent.messages[agent.msg_count].role, "tool");
             strncpy(agent.messages[agent.msg_count].content, result, MAX_CONTENT - 1);
             agent.messages[agent.msg_count].content[MAX_CONTENT - 1] = '\0';
+            strncpy(agent.messages[agent.msg_count].tool_calls, tool_calls, MAX_CONTENT - 1);
+            agent.messages[agent.msg_count].tool_calls[MAX_CONTENT - 1] = '\0';
             agent.msg_count++;
         }
     }
@@ -61,6 +75,7 @@ int process_agent(const char* task) {
     strcpy(agent.messages[agent.msg_count].role, "user");
     strncpy(agent.messages[agent.msg_count].content, task, MAX_CONTENT - 1);
     agent.messages[agent.msg_count].content[MAX_CONTENT - 1] = '\0';
+    agent.messages[agent.msg_count].tool_calls[0] = '\0';
     agent.msg_count++;
 
     char req[MAX_BUFFER], resp[MAX_BUFFER];
@@ -69,7 +84,24 @@ int process_agent(const char* task) {
     if (http_request(req, resp, sizeof(resp))) return -1;
 
     if (has_tool_call(resp)) {
+        char assistant_content[MAX_CONTENT] = {0};
+        char tool_calls[MAX_CONTENT] = {0};
+
+        json_content(resp, assistant_content, sizeof(assistant_content));
+
+        extract_tool_calls(resp, tool_calls, sizeof(tool_calls), NULL, 0);
+
+        if (strlen(tool_calls) > 0) {
+            strcpy(agent.messages[agent.msg_count].role, "assistant");
+            strncpy(agent.messages[agent.msg_count].content, assistant_content, MAX_CONTENT - 1);
+            agent.messages[agent.msg_count].content[MAX_CONTENT - 1] = '\0';
+            strncpy(agent.messages[agent.msg_count].tool_calls, tool_calls, MAX_CONTENT - 1);
+            agent.messages[agent.msg_count].tool_calls[MAX_CONTENT - 1] = '\0';
+            agent.msg_count++;
+        }
+
         execute_command(resp);
+
         json_request(&agent, &config, req, sizeof(req));
         http_request(req, resp, sizeof(resp));
     }
@@ -82,6 +114,7 @@ int process_agent(const char* task) {
             strcpy(agent.messages[agent.msg_count].role, "assistant");
             strncpy(agent.messages[agent.msg_count].content, content, MAX_CONTENT - 1);
             agent.messages[agent.msg_count].content[MAX_CONTENT - 1] = '\0';
+            agent.messages[agent.msg_count].tool_calls[0] = '\0';
             agent.msg_count++;
         }
     } else {

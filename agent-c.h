@@ -14,6 +14,7 @@
 typedef struct {
     char role[12];
     char content[MAX_CONTENT];
+    char tool_calls[MAX_CONTENT];
 } Message;
 
 typedef struct {
@@ -37,6 +38,7 @@ char* json_content(const char* response, char* out, size_t size);
 char* json_error(const char* response, char* out, size_t size);
 int http_request(const char* req, char* resp, size_t resp_size);
 int extract_command(const char* response, char* cmd, size_t cmd_size);
+int extract_tool_calls(const char* response, char* tool_calls, size_t calls_size, char* tool_call_id, size_t id_size);
 
 static inline int has_tool_call(const char* response) {
     if (!response) return 0;
