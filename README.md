@@ -51,6 +51,16 @@ export AGENTC_BASE_URL=https://your-custom-api.com/v1/chat/completions
 export AGENTC_MODEL=your_custom_model
 ```
 
+**Optional**: Configure specific providers (defaults to cerebras):
+
+```bash
+# Use specific providers (comma-separated)
+export AGENTC_OP_PROVIDER="cerebras,openai"
+
+# Disable provider filtering (use all available providers)
+export AGENTC_OP_PROVIDER=false
+```
+
 ### Run
 
 ```bash
