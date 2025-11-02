@@ -1,163 +1,187 @@
 #include "agent-c.h"
-
-static char* json_find(const char* json, const char* key, char* out, size_t size) {
-    if (!json || !key || !out) return NULL;
-    char pattern[64];
-    snprintf(pattern, 64, "\"%s\":", key);
-    const char* start = strstr(json, pattern);
-    if (!start) return NULL;
-    start += strlen(pattern);
-    while (*start == ' ' || *start == '\t') start++;
-
-    if (*start == '"') {
-        start++;
-        const char* end = start;
-        while (*end && *end != '"') {
-            if (*end == '\\' && end[1]) end += 2;
-            else end++;
-        }
-        size_t len = end - start;
-        if (len >= size) len = size - 1;
-        strncpy(out, start, len);
-        out[len] = '\0';
-
-        for (char* p = out; *p; p++) {
-            if (*p == '\\' && p[1]) {
-                switch (p[1]) {
-                case 'n': *p = '\n'; memmove(p+1, p+2, strlen(p+1)); break;
-                case 't': *p = '\t'; memmove(p+1, p+2, strlen(p+1)); break;
-                case 'r': *p = '\r'; memmove(p+1, p+2, strlen(p+1)); break;
-                case '\\': case '"': memmove(p, p+1, strlen(p)); break;
-                }
-            }
-        }
-    } else {
-        const char* end = start;
-        while (*end && *end != ',' && *end != '}' && *end != ' ' && *end != '\n') end++;
-        size_t len = end - start;
-        if (len >= size) len = size - 1;
-        strncpy(out, start, len);
-        out[len] = '\0';
-    }
-    return out;
-}
+#include <cjson/cJSON.h>
 
 char* json_request(const Agent* agent, const Config* config, char* out, size_t size) {
     if (!agent || !out) return NULL;
 
-    char messages[MAX_BUFFER] = "[";
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "model", config->model);
+    cJSON_AddNumberToObject(root, "temperature", config->temp);
+    cJSON_AddNumberToObject(root, "max_tokens", config->max_tokens);
+    cJSON_AddFalseToObject(root, "stream");
+    cJSON_AddStringToObject(root, "tool_choice", "auto");
+
+    cJSON *tools = cJSON_CreateArray();
+    cJSON *tool = cJSON_CreateObject();
+    cJSON_AddStringToObject(tool, "type", "function");
+    cJSON *function = cJSON_CreateObject();
+    cJSON_AddStringToObject(function, "name", "execute_command");
+    cJSON_AddStringToObject(function, "description", "Execute shell command");
+    cJSON *parameters = cJSON_CreateObject();
+    cJSON_AddStringToObject(parameters, "type", "object");
+    cJSON *properties = cJSON_CreateObject();
+    cJSON *command = cJSON_CreateObject();
+    cJSON_AddStringToObject(command, "type", "string");
+    cJSON_AddItemToObject(properties, "command", command);
+    cJSON_AddItemToObject(parameters, "properties", properties);
+    cJSON *required = cJSON_CreateStringArray((const char*[]){"command"}, 1);
+    cJSON_AddItemToObject(parameters, "required", required);
+    cJSON_AddItemToObject(function, "parameters", parameters);
+    cJSON_AddItemToObject(tool, "function", function);
+    cJSON_AddItemToArray(tools, tool);
+    cJSON_AddItemToObject(root, "tools", tools);
+
+    cJSON *messages = cJSON_CreateArray();
     for (int i = 0; i < agent->msg_count; i++) {
-        if (i > 0) strcat(messages, ",");
         const Message* msg = &agent->messages[i];
-        char temp[MAX_CONTENT + 100];
-        if (!strcmp(msg->role, "tool")) {
-            char tool_call_id[64] = {0};
+        cJSON *message = cJSON_CreateObject();
+        cJSON_AddStringToObject(message, "role", msg->role);
 
-            const char* start = strstr(msg->tool_calls, "\"id\":");
-            if (start) {
-                json_find(start, "id", tool_call_id, sizeof(tool_call_id));
+        if (strcmp(msg->role, "tool") == 0) {
+            cJSON_AddStringToObject(message, "content", msg->content);
+            cJSON* tool_calls = cJSON_Parse(msg->tool_calls);
+            cJSON* first_tool_call = cJSON_GetArrayItem(tool_calls, 0);
+            cJSON* tool_call_id = cJSON_GetObjectItem(first_tool_call, "id");
+            if (cJSON_IsString(tool_call_id)) {
+                cJSON_AddStringToObject(message, "tool_call_id", tool_call_id->valuestring);
             }
-
-            if (strlen(tool_call_id) > 0) {
-                snprintf(temp, sizeof(temp), "{\"role\":\"tool\",\"content\":\"%s\",\"tool_call_id\":\"%s\"}",
-                         msg->content, tool_call_id);
-            } else {
-                snprintf(temp, sizeof(temp), "{\"role\":\"tool\",\"content\":\"%s\"}", msg->content);
-            }
-        } else if (!strcmp(msg->role, "assistant") && strlen(msg->tool_calls) > 0) {
-            // Assistant message with tool_calls
+            cJSON_Delete(tool_calls);
+        } else if (strcmp(msg->role, "assistant") == 0 && strlen(msg->tool_calls) > 0) {
             if (strlen(msg->content) > 0) {
-                snprintf(temp, sizeof(temp), "{\"role\":\"assistant\",\"content\":\"%s\",\"tool_calls\":%s}",
-                         msg->content, msg->tool_calls);
+                cJSON_AddStringToObject(message, "content", msg->content);
             } else {
-                snprintf(temp, sizeof(temp), "{\"role\":\"assistant\",\"content\":null,\"tool_calls\":%s}",
-                         msg->tool_calls);
+                cJSON_AddNullToObject(message, "content");
             }
+            cJSON* tool_calls_json = cJSON_Parse(msg->tool_calls);
+            cJSON_AddItemToObject(message, "tool_calls", tool_calls_json);
         } else {
-            snprintf(temp, sizeof(temp), "{\"role\":\"%s\",\"content\":\"%s\"}",
-                     msg->role, msg->content);
+            cJSON_AddStringToObject(message, "content", msg->content);
         }
-        if (strlen(messages) + strlen(temp) + 10 < sizeof(messages)) strcat(messages, temp);
-    }
-    strcat(messages, "]");
 
-    snprintf(out, size,
-             "{\"model\":\"%s\",\"messages\":%s,\"temperature\":%.1f,\"max_tokens\":%d,\"stream\":false,"
-             "\"tool_choice\":\"auto\","
-             "\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"execute_command\","
-             "\"description\":\"Execute shell command\",\"parameters\":{\"type\":\"object\",\"properties\":{\"command\":{\"type\":\"string\"}},"
-             "\"required\":[\"command\"]}}}]%s}",
-             config->model, messages, config->temp, config->max_tokens, config->op_providers_json);
+        cJSON_AddItemToArray(messages, message);
+    }
+    cJSON_AddItemToObject(root, "messages", messages);
+
+    if (config->op_providers_on && strlen(config->op_providers_json) > 0) {
+        cJSON* providers_json = cJSON_Parse(config->op_providers_json);
+        cJSON_AddItemToObject(root, "optional_providers", providers_json);
+    }
+
+    char* json_string = cJSON_PrintUnformatted(root);
+    strncpy(out, json_string, size - 1);
+    out[size - 1] = '\0';
+
+    cJSON_Delete(root);
+    free(json_string);
 
     return out;
 }
 
+static char* get_json_string(cJSON* obj, const char* key, char* out, size_t size) {
+    if (!obj || !out) return NULL;
+    cJSON* item = cJSON_GetObjectItem(obj, key);
+    if (cJSON_IsString(item) && (item->valuestring != NULL)) {
+        strncpy(out, item->valuestring, size - 1);
+        out[size - 1] = '\0';
+        return out;
+    }
+    return NULL;
+}
+
 char* json_content(const char* response, char* out, size_t size) {
     if (!response || !out) return NULL;
-    const char* choices = strstr(response, "\"choices\":");
-    if (!choices) return NULL;
-    const char* message = strstr(choices, "\"message\":");
-    if (!message) return NULL;
-    return json_find(message, "content", out, size);
+
+    cJSON *root = cJSON_Parse(response);
+    if (!root) return NULL;
+
+    cJSON *choices = cJSON_GetObjectItem(root, "choices");
+    if (!cJSON_IsArray(choices) || cJSON_GetArraySize(choices) == 0) {
+        cJSON_Delete(root);
+        return NULL;
+    }
+
+    cJSON *first_choice = cJSON_GetArrayItem(choices, 0);
+    cJSON *message = cJSON_GetObjectItem(first_choice, "message");
+    get_json_string(message, "content", out, size);
+
+    cJSON_Delete(root);
+    return out;
 }
 
 char* json_error(const char* response, char* out, size_t size) {
     if (!response || !out) return NULL;
-    const char* error = strstr(response, "\"error\":");
-    if (!error) return NULL;
-    return json_find(error, "message", out, size);
+
+    cJSON *root = cJSON_Parse(response);
+    if (!root) return NULL;
+
+    cJSON *error = cJSON_GetObjectItem(root, "error");
+    get_json_string(error, "message", out, size);
+
+    cJSON_Delete(root);
+    return out;
 }
 
 int extract_command(const char* response, char* cmd, size_t cmd_size) {
     if (!response || !cmd) return 0;
 
-    const char* start = strstr(response, "\"tool_calls\":");
-    if (!start) return 0;
+    cJSON *root = cJSON_Parse(response);
+    if (!root) return 0;
 
-    start = strstr(start, "\"arguments\":");
-    if (!start) return 0;
+    cJSON *choices = cJSON_GetObjectItem(root, "choices");
+    if (!cJSON_IsArray(choices) || cJSON_GetArraySize(choices) == 0) {
+        cJSON_Delete(root);
+        return 0;
+    }
 
-    char args[1024];
-    if (!json_find(start, "arguments", args, sizeof(args))) return 0;
+    cJSON *first_choice = cJSON_GetArrayItem(choices, 0);
+    cJSON *message = cJSON_GetObjectItem(first_choice, "message");
+    cJSON *tool_calls = cJSON_GetObjectItem(message, "tool_calls");
+    if (!cJSON_IsArray(tool_calls) || cJSON_GetArraySize(tool_calls) == 0) {
+        cJSON_Delete(root);
+        return 0;
+    }
 
-    return json_find(args, "command", cmd, cmd_size) != NULL;
+    cJSON *first_tool_call = cJSON_GetArrayItem(tool_calls, 0);
+    cJSON *function = cJSON_GetObjectItem(first_tool_call, "function");
+    cJSON *arguments = cJSON_GetObjectItem(function, "arguments");
+    if (cJSON_IsString(arguments) && arguments->valuestring != NULL) {
+        cJSON* args_json = cJSON_Parse(arguments->valuestring);
+        get_json_string(args_json, "command", cmd, cmd_size);
+        cJSON_Delete(args_json);
+    }
+
+    cJSON_Delete(root);
+    return strlen(cmd) > 0;
 }
 
-int extract_tool_calls(const char* response, char* tool_calls, size_t calls_size, char* tool_call_id, size_t id_size) {
-    if (!response || !tool_calls) return 0;
+int extract_tool_calls(const char* response, char* tool_calls_str, size_t calls_size, char* tool_call_id, size_t id_size) {
+    if (!response || !tool_calls_str) return 0;
 
-    const char* start = strstr(response, "\"tool_calls\":");
-    if (!start) return 0;
+    cJSON *root = cJSON_Parse(response);
+    if (!root) return 0;
 
-    start += 13; // Skip "tool_calls":
-    while (*start == ' ' || *start == '\t') start++;
+    cJSON *choices = cJSON_GetObjectItem(root, "choices");
+    if (!cJSON_IsArray(choices) || cJSON_GetArraySize(choices) == 0) {
+        cJSON_Delete(root);
+        return 0;
+    }
 
-    if (*start != '[') return 0;
+    cJSON *first_choice = cJSON_GetArrayItem(choices, 0);
+    cJSON *message = cJSON_GetObjectItem(first_choice, "message");
+    cJSON *tool_calls = cJSON_GetObjectItem(message, "tool_calls");
 
-    const char* end = start;
-    int depth = 0;
-    do {
-        if (*end == '[') depth++;
-        else if (*end == ']') depth--;
-        end++;
-    } while (depth > 0 && *end);
+    if (cJSON_IsArray(tool_calls)) {
+        char* rendered = cJSON_PrintUnformatted(tool_calls);
+        strncpy(tool_calls_str, rendered, calls_size - 1);
+        tool_calls_str[calls_size - 1] = '\0';
+        free(rendered);
 
-    if (depth != 0) return 0;
-
-    size_t len = end - start;
-    if (len >= calls_size) len = calls_size - 1;
-    strncpy(tool_calls, start, len);
-    tool_calls[len] = '\0';
-
-    if (tool_call_id && id_size > 0) {
-        const char* id_start = strstr(tool_calls, "\"id\":");
-        if (id_start) {
-            json_find(id_start, "id", tool_call_id, id_size);
-        } else {
-            tool_call_id[0] = '\0';
+        if (tool_call_id && id_size > 0) {
+            cJSON *first_tool_call = cJSON_GetArrayItem(tool_calls, 0);
+            get_json_string(first_tool_call, "id", tool_call_id, id_size);
         }
     }
 
-    return 1;
+    cJSON_Delete(root);
+    return strlen(tool_calls_str) > 0;
 }
-

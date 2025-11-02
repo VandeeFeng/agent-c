@@ -15,10 +15,10 @@ CFLAGS_OPT = -std=c99 -D_POSIX_C_SOURCE=200809L -Oz -DNDEBUG \
 
 # Linker flags per-OS (do not put -Wl flags in CFLAGS)
 ifeq ($(UNAME),Darwin)
-LDFLAGS_OPT = -Wl,-dead_strip -Wl,-x -Wl,-S
+LDFLAGS_OPT = -Wl,-dead_strip -Wl,-x -Wl,-S -lcjson
 else
 # GNU ld: garbage collect unused sections and keep binary small
-LDFLAGS_OPT = -Wl,--gc-sections
+LDFLAGS_OPT = -Wl,--gc-sections -lcjson
 endif
 
 # Auto-detect platform and build appropriately
