@@ -11,6 +11,11 @@
 #define MAX_BUFFER 8192
 #define MAX_CONTENT 4096
 
+// Skill system constants
+#define MAX_SKILL_NAME 64
+#define MAX_SKILL_PATH 512
+#define MAX_SKILL_RESULT 4096
+
 typedef struct {
     char role[12];
     char content[MAX_CONTENT];
@@ -39,6 +44,8 @@ char* json_error(const char* response, char* out, size_t size);
 int http_request(const char* req, char* resp, size_t resp_size);
 int extract_command(const char* response, char* cmd, size_t cmd_size);
 int extract_tool_calls(const char* response, char* tool_calls, size_t calls_size, char* tool_call_id, size_t id_size);
+int extract_skill_name(const char* response, char* skill_name, size_t name_size);
+int extract_skill_command(const char* response, char* skill_command, size_t cmd_size);
 
 static inline int has_tool_call(const char* response) {
     if (!response) return 0;
@@ -63,5 +70,10 @@ void init_agent(void);
 int execute_command(const char* response);
 void run_cli(void);
 void load_config(void);
+
+// Skill system functions
+int discover_skills(char* skills_list, size_t list_size);
+int extract_skill(const char* skill_name, char* skill_content, size_t content_size);
+int execute_skill(const char* skill_command, char* result, size_t result_size);
 
 #endif

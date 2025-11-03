@@ -2,12 +2,10 @@
 
 A ultra-lightweight AI agent written in C that communicates with OpenRouter API and executes shell commands.
 
-![Agent-C Preview](preview.webp)
-
 ## Features
 
 - **Tool Calling**: Execute shell commands directly through AI responses
-- **Optimized Binaries**: 4.4KB on macOS (GZEXE), ~16KB on Linux (UPX)
+- **Skill System**: Discover and execute predefined skill scripts from `~/.agent-c/skills/` directory
 - **Conversation Memory**: Sliding window memory management for efficient operation
 - **Cross-Platform**: macOS and Linux
 
@@ -16,8 +14,9 @@ A ultra-lightweight AI agent written in C that communicates with OpenRouter API 
 ### Prerequisites
 
 - GCC compiler
+- cJSON library
 - curl command-line tool
-- OpenRouter API key
+- OpenRouter or OpenAI API key
 - macOS: gzexe (usually pre-installed)
 - Linux: upx (optional, for compression)
 
@@ -27,9 +26,29 @@ A ultra-lightweight AI agent written in C that communicates with OpenRouter API 
 make
 ```
 
-The build system auto-detects your platform and applies optimal compression:
-- **macOS**: Uses GZEXE compression → 4.4KB binary
-- **Linux**: Uses UPX compression → ~16KB binary
+### Skill System
+[Introducing Agent Skills | Claude](https://claude.com/blog/skills)
+
+[Equipping agents for the real world with Agent Skills \ Anthropic](https://www.anthropic.com/engineering/equipping-agents-for-the-real-world-with-agent-skills)
+
+Inspired by Claude's skill system, this project implements similar functionality to execute custom scripts
+
+Create skills in `~/.agent-c/skills/` with the following structure:
+
+```
+~/.agent-c/skills/
+└── git/
+    ├── SKILL.md
+    └── scripts/
+        └── commit_analyzer.sh
+```
+
+Each `SKILL.md` file should contain:
+- Skill description and usage examples
+- Available scripts and their arguments
+- Best practices and notes
+
+The agent will automatically discover skills and make them available during conversation.
 
 ### Setup
 

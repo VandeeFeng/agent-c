@@ -17,7 +17,7 @@ static void add_message_to_json(cJSON *messages, const Message *msg) {
         }
     } else if (strcmp(msg->role, "assistant") == 0 && msg->tool_calls[0]) {
         cJSON_AddItemToObject(message, "content",
-            msg->content[0] ? cJSON_CreateString(msg->content) : cJSON_CreateNull());
+                              msg->content[0] ? cJSON_CreateString(msg->content) : cJSON_CreateNull());
         cJSON_AddItemToObject(message, "tool_calls", cJSON_Parse(msg->tool_calls));
     } else {
         cJSON_AddStringToObject(message, "content", msg->content);
@@ -38,7 +38,13 @@ char* json_request(const Agent* agent, const Config* config, char* out, size_t s
     const char* tool_json_str =
         "[{\"type\":\"function\",\"function\":{\"name\":\"execute_command\","
         "\"description\":\"Execute shell command\",\"parameters\":{\"type\":\"object\","
-        "\"properties\":{\"command\":{\"type\":\"string\"}},\"required\":[\"command\"]}}}]";
+        "\"properties\":{\"command\":{\"type\":\"string\"}},\"required\":[\"command\"]}}},"
+        "{\"type\":\"function\",\"function\":{\"name\":\"extract_skill\","
+        "\"description\":\"Extract content from SKILL.md file\",\"parameters\":{\"type\":\"object\","
+        "\"properties\":{\"skill_name\":{\"type\":\"string\"}},\"required\":[\"skill_name\"]}}},"
+        "{\"type\":\"function\",\"function\":{\"name\":\"execute_skill\","
+        "\"description\":\"Execute skill script\",\"parameters\":{\"type\":\"object\","
+        "\"properties\":{\"skill_command\":{\"type\":\"string\"}},\"required\":[\"skill_command\"]}}}]";
     cJSON_AddItemToObject(root, "tools", cJSON_Parse(tool_json_str));
 
     cJSON *messages = cJSON_CreateArray();
@@ -193,4 +199,78 @@ int extract_tool_calls(const char* response, char* tool_calls_str, size_t calls_
 
     cJSON_Delete(root);
     return strlen(tool_calls_str) > 0;
+}
+
+int extract_skill_name(const char* response, char* skill_name, size_t name_size) {
+    if (!response || !skill_name) return 0;
+
+    cJSON *root = cJSON_Parse(response);
+    if (!root) return 0;
+
+    cJSON *choices = cJSON_GetObjectItem(root, "choices");
+    if (!cJSON_IsArray(choices) || cJSON_GetArraySize(choices) == 0) {
+        cJSON_Delete(root);
+        return 0;
+    }
+
+    cJSON *first_choice = cJSON_GetArrayItem(choices, 0);
+    cJSON *message = cJSON_GetObjectItem(first_choice, "message");
+    cJSON *tool_calls = cJSON_GetObjectItem(message, "tool_calls");
+    if (!cJSON_IsArray(tool_calls) || cJSON_GetArraySize(tool_calls) == 0) {
+        cJSON_Delete(root);
+        return 0;
+    }
+
+    cJSON *first_tool_call = cJSON_GetArrayItem(tool_calls, 0);
+    cJSON *function = cJSON_GetObjectItem(first_tool_call, "function");
+
+    cJSON *func_name = cJSON_GetObjectItem(function, "name");
+    if (cJSON_IsString(func_name) && strcmp(func_name->valuestring, "extract_skill") == 0) {
+        cJSON *arguments = cJSON_GetObjectItem(function, "arguments");
+        if (cJSON_IsString(arguments) && arguments->valuestring != NULL) {
+            cJSON* args_json = cJSON_Parse(arguments->valuestring);
+            get_json_string(args_json, "skill_name", skill_name, name_size);
+            cJSON_Delete(args_json);
+        }
+    }
+
+    cJSON_Delete(root);
+    return strlen(skill_name) > 0;
+}
+
+int extract_skill_command(const char* response, char* skill_command, size_t cmd_size) {
+    if (!response || !skill_command) return 0;
+
+    cJSON *root = cJSON_Parse(response);
+    if (!root) return 0;
+
+    cJSON *choices = cJSON_GetObjectItem(root, "choices");
+    if (!cJSON_IsArray(choices) || cJSON_GetArraySize(choices) == 0) {
+        cJSON_Delete(root);
+        return 0;
+    }
+
+    cJSON *first_choice = cJSON_GetArrayItem(choices, 0);
+    cJSON *message = cJSON_GetObjectItem(first_choice, "message");
+    cJSON *tool_calls = cJSON_GetObjectItem(message, "tool_calls");
+    if (!cJSON_IsArray(tool_calls) || cJSON_GetArraySize(tool_calls) == 0) {
+        cJSON_Delete(root);
+        return 0;
+    }
+
+    cJSON *first_tool_call = cJSON_GetArrayItem(tool_calls, 0);
+    cJSON *function = cJSON_GetObjectItem(first_tool_call, "function");
+
+    cJSON *func_name = cJSON_GetObjectItem(function, "name");
+    if (cJSON_IsString(func_name) && strcmp(func_name->valuestring, "execute_skill") == 0) {
+        cJSON *arguments = cJSON_GetObjectItem(function, "arguments");
+        if (cJSON_IsString(arguments) && arguments->valuestring != NULL) {
+            cJSON* args_json = cJSON_Parse(arguments->valuestring);
+            get_json_string(args_json, "skill_command", skill_command, cmd_size);
+            cJSON_Delete(args_json);
+        }
+    }
+
+    cJSON_Delete(root);
+    return strlen(skill_command) > 0;
 }
