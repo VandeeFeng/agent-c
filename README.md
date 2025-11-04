@@ -2,6 +2,8 @@
 
 A ultra-lightweight AI agent written in C that communicates with OpenRouter API and executes shell commands.
 
+![Agent-C Skills](agent-c-skills.png)
+
 ## Features
 
 - **Tool Calling**: Execute shell commands directly through AI responses
