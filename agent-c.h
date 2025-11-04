@@ -43,7 +43,14 @@ char* json_content(const char* response, char* out, size_t size);
 char* json_error(const char* response, char* out, size_t size);
 int http_request(const char* req, char* resp, size_t resp_size);
 int extract_command(const char* response, char* cmd, size_t cmd_size);
-int extract_tool_calls(const char* response, char* tool_calls, size_t calls_size, char* tool_call_id, size_t id_size);
+
+typedef struct {
+    const char* type;
+    const char* tool_name;
+    const char* param_name;
+} ToolExtractor;
+
+int extract_tool_calls(const char* response, char* output, size_t output_size, const ToolExtractor* extractor);
 int extract_skill_name(const char* response, char* skill_name, size_t name_size);
 int extract_skill_command(const char* response, char* skill_command, size_t cmd_size);
 

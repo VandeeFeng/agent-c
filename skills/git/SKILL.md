@@ -19,31 +19,28 @@ A Git analysis toolkit for inspecting repository history, commits, and code chan
 ## Usage Examples
 
 ### Analyze recent commits
-```
-execute_skill: git commit_analyzer --days=7
-```
+
+execute_skill: git commit_analyzer
+
+commit_analyzer.sh: Analyze commit history and patterns
 
 ### Get repository statistics
-```
+
 execute_skill: git repo_stats
-```
+
+repo_stats.sh: Get repository statistics
 
 ### Find who modified a file
-```
-execute_skill: git file_blame src/main.c
-```
+
+execute_skill: git file_blame
+
+file_blame.sh: Analyze file modifications
 
 ### Analyze commit patterns
-```
-execute_skill: git commit_patterns --author=john
-```
 
-## Scripts
+execute_skill: git commit_patterns
 
-- `commit_analyzer.sh`: Analyze commit history and patterns
-- `repo_stats.sh`: Get repository statistics
-- `file_blame.sh`: Analyze file modifications
-- `commit_patterns.sh`: Find commit patterns and trends
+commit_patterns.sh: Find commit patterns and trends
 
 ## Requirements
 
