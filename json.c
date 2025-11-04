@@ -54,7 +54,7 @@ char* json_request(const Agent* agent, const Config* config, char* out, size_t s
     cJSON_AddItemToObject(root, "messages", messages);
 
     if (config->op_providers_on && config->op_providers_json[0]) {
-        cJSON_AddItemToObject(root, "optional_providers", cJSON_Parse(config->op_providers_json));
+        cJSON_AddItemToObject(root, "provider", cJSON_Parse(config->op_providers_json));
     }
 
     char* json_string = cJSON_PrintUnformatted(root);

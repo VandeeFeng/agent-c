@@ -74,7 +74,7 @@ void load_config(void) {
         char formatted[300];
         format_providers(config.op_providers, formatted, sizeof(formatted));
         snprintf(config.op_providers_json, sizeof(config.op_providers_json),
-                 ",\"provider\":{\"only\":[%s]}", formatted);
+                 "{\"only\":[%s]}", formatted);
     } else {
         config.op_providers_json[0] = '\0';
     }
