@@ -1,5 +1,3 @@
-# Local build artifacts
 agent-c
+docs/
 
-# IDE
-.idea/

@@ -17,7 +17,7 @@ static void add_message_to_json(cJSON *messages, const Message *msg) {
         }
     } else if (strcmp(msg->role, "assistant") == 0 && msg->tool_calls[0]) {
         cJSON_AddItemToObject(message, "content",
-            msg->content[0] ? cJSON_CreateString(msg->content) : cJSON_CreateNull());
+                              msg->content[0] ? cJSON_CreateString(msg->content) : cJSON_CreateNull());
         cJSON_AddItemToObject(message, "tool_calls", cJSON_Parse(msg->tool_calls));
     } else {
         cJSON_AddStringToObject(message, "content", msg->content);
@@ -38,7 +38,13 @@ char* json_request(const Agent* agent, const Config* config, char* out, size_t s
     const char* tool_json_str =
         "[{\"type\":\"function\",\"function\":{\"name\":\"execute_command\","
         "\"description\":\"Execute shell command\",\"parameters\":{\"type\":\"object\","
-        "\"properties\":{\"command\":{\"type\":\"string\"}},\"required\":[\"command\"]}}}]";
+        "\"properties\":{\"command\":{\"type\":\"string\"}},\"required\":[\"command\"]}}},"
+        "{\"type\":\"function\",\"function\":{\"name\":\"extract_skill\","
+        "\"description\":\"Extract content from SKILL.md file\",\"parameters\":{\"type\":\"object\","
+        "\"properties\":{\"skill_name\":{\"type\":\"string\"}},\"required\":[\"skill_name\"]}}},"
+        "{\"type\":\"function\",\"function\":{\"name\":\"execute_skill\","
+        "\"description\":\"Execute skill script with format: 'skill_name script_name [arguments]'. Script name should not include file extension.\",\"parameters\":{\"type\":\"object\","
+        "\"properties\":{\"skill_command\":{\"type\":\"string\"}},\"required\":[\"skill_command\"]}}}]";
     cJSON_AddItemToObject(root, "tools", cJSON_Parse(tool_json_str));
 
     cJSON *messages = cJSON_CreateArray();
@@ -163,8 +169,8 @@ int extract_command(const char* response, char* cmd, size_t cmd_size) {
     return strlen(cmd) > 0;
 }
 
-int extract_tool_calls(const char* response, char* tool_calls_str, size_t calls_size, char* tool_call_id, size_t id_size) {
-    if (!response || !tool_calls_str) return 0;
+int extract_tool_calls(const char* response, char* output, size_t output_size, const ToolExtractor* extractor) {
+    if (!response || !output) return 0;
 
     cJSON *root = cJSON_Parse(response);
     if (!root) return 0;
@@ -178,19 +184,49 @@ int extract_tool_calls(const char* response, char* tool_calls_str, size_t calls_
     cJSON *first_choice = cJSON_GetArrayItem(choices, 0);
     cJSON *message = cJSON_GetObjectItem(first_choice, "message");
     cJSON *tool_calls = cJSON_GetObjectItem(message, "tool_calls");
+    if (!cJSON_IsArray(tool_calls) || cJSON_GetArraySize(tool_calls) == 0) {
+        cJSON_Delete(root);
+        return 0;
+    }
 
-    if (cJSON_IsArray(tool_calls)) {
-        char* rendered = cJSON_PrintUnformatted(tool_calls);
-        strncpy(tool_calls_str, rendered, calls_size - 1);
-        tool_calls_str[calls_size - 1] = '\0';
-        free(rendered);
+    int success = 0;
+    cJSON *first_tool_call = cJSON_GetArrayItem(tool_calls, 0);
 
-        if (tool_call_id && id_size > 0) {
-            cJSON *first_tool_call = cJSON_GetArrayItem(tool_calls, 0);
-            get_json_string(first_tool_call, "id", tool_call_id, id_size);
+    const char* extract_type = extractor ? extractor->type : "all";
+
+    if (strcmp(extract_type, "all") == 0) {
+        if (cJSON_IsArray(tool_calls)) {
+            char* rendered = cJSON_PrintUnformatted(tool_calls);
+            strncpy(output, rendered, output_size - 1);
+            output[output_size - 1] = '\0';
+            free(rendered);
+            success = strlen(output) > 0;
+        }
+    }
+    else if (strcmp(extract_type, "id") == 0) {
+        if (first_tool_call) {
+            get_json_string(first_tool_call, "id", output, output_size);
+            success = strlen(output) > 0;
+        }
+    }
+    else if (strcmp(extract_type, "param") == 0) {
+        if (extractor && extractor->tool_name && extractor->param_name) {
+            cJSON *function = cJSON_GetObjectItem(first_tool_call, "function");
+            cJSON *func_name = cJSON_GetObjectItem(function, "name");
+
+            if (cJSON_IsString(func_name) && strcmp(func_name->valuestring, extractor->tool_name) == 0) {
+                cJSON *arguments = cJSON_GetObjectItem(function, "arguments");
+                if (cJSON_IsString(arguments) && arguments->valuestring != NULL) {
+                    cJSON* args_json = cJSON_Parse(arguments->valuestring);
+                    get_json_string(args_json, extractor->param_name, output, output_size);
+                    cJSON_Delete(args_json);
+                    success = strlen(output) > 0;
+                }
+            }
         }
     }
 
     cJSON_Delete(root);
-    return strlen(tool_calls_str) > 0;
+    return success;
 }
+
