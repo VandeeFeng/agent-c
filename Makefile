@@ -1,5 +1,6 @@
 CC = gcc
 TARGET = agent-c
+# Use sj.h library instead of cJSON
 SOURCES = main.c json.c agent.c cli.c utils.c skill.c
 
 # Detect OS once
@@ -15,10 +16,10 @@ CFLAGS_OPT = -std=c99 -D_POSIX_C_SOURCE=200809L -Oz -DNDEBUG \
 
 # Linker flags per-OS (do not put -Wl flags in CFLAGS)
 ifeq ($(UNAME),Darwin)
-LDFLAGS_OPT = -Wl,-dead_strip -Wl,-x -Wl,-S -lcjson
+LDFLAGS_OPT = -Wl,-dead_strip -Wl,-x -Wl,-S
 else
 # GNU ld: garbage collect unused sections and keep binary small
-LDFLAGS_OPT = -Wl,--gc-sections -lcjson
+LDFLAGS_OPT = -Wl,--gc-sections
 endif
 
 # Auto-detect platform and build appropriately

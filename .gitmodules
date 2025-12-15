@@ -1,0 +1,3 @@
+[submodule "sj.h"]
+	path = sj.h
+	url = git@github.com:rxi/sj.h.git

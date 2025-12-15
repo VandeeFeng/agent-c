@@ -16,7 +16,7 @@ A ultra-lightweight AI agent written in C that communicates with OpenRouter API 
 ### Prerequisites
 
 - GCC compiler
-- cJSON library
+- sj.h library
 - curl command-line tool
 - OpenRouter or OpenAI API key
 - macOS: gzexe (usually pre-installed)
