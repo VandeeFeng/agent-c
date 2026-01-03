@@ -40,7 +40,7 @@ void init_agent(void) {
     agent.msg_count = 1;
 }
 
-static void add_message(const char* role, const char* content, const char* tool_calls) {
+static void add_message(const char *role, const char *content, const char *tool_calls) {
     if (agent.msg_count >= MAX_MESSAGES - 1) return;
 
     strcpy(agent.messages[agent.msg_count].role, role);
@@ -57,12 +57,12 @@ static void add_message(const char* role, const char* content, const char* tool_
     agent.msg_count++;
 }
 
-static void add_tool_message(const char* content, const char* tool_calls) {
+static void add_tool_message(const char *content, const char *tool_calls) {
     add_message("tool", content, tool_calls);
 }
 
 
-int execute_command(const char* response) {
+int execute_command(const char *response) {
     if (!response) return 0;
 
     char cmd[MAX_CONTENT] = {0};
@@ -136,14 +136,14 @@ int execute_command(const char* response) {
         if (fd == -1) return 0;
         close(fd);
 
-        static const char* exec_template = "(%s) > '%s' 2>&1";
+        static const char *exec_template = "(%s) > '%s' 2>&1";
         char full[MAX_BUFFER];
         snprintf(full, MAX_BUFFER, exec_template, cmd, temp);
 
         int code = system(full);
         char result[MAX_CONTENT] = {0};
 
-        FILE* f = fopen(temp, "r");
+        FILE *f = fopen(temp, "r");
         if (f) {
             size_t bytes = fread(result, 1, MAX_CONTENT - 1, f);
             result[bytes] = '\0';
@@ -162,7 +162,7 @@ int execute_command(const char* response) {
     return 0;
 }
 
-int process_agent(const char* task) {
+int process_agent(const char *task) {
     if (!task) return -1;
 
     if (agent.msg_count >= MAX_MESSAGES - 1) {

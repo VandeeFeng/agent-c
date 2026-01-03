@@ -6,13 +6,13 @@
 #include <string.h>
 
 // Helper: compare sj_Value with string
-static bool eq(sj_Value v, const char* s) {
+static bool eq(sj_Value v, const char *s) {
     size_t len = v.end - v.start;
     return strlen(s) == len && memcmp(s, v.start, len) == 0;
 }
 
 // Helper: extract and unescape string
-static char* get_str(sj_Value v, char* out, size_t size) {
+static char *get_str(sj_Value v, char *out, size_t size) {
     if (v.type != SJ_STRING || !out) {
         if (out) out[0] = '\0';
         return NULL;
@@ -22,8 +22,8 @@ static char* get_str(sj_Value v, char* out, size_t size) {
     if (len >= size) len = size - 1;
 
     // Copy and unescape in one pass
-    char* dst = out;
-    for (const char* src = v.start; src < v.end && dst < out + len;) {
+    char *dst = out;
+    for (const char *src = v.start; src < v.end && dst < out + len;) {
         if (*src == '\\' && src + 1 < v.end) {
             switch (*++src) {
                 case 'n': *dst++ = '\n'; break;
@@ -43,12 +43,12 @@ static char* get_str(sj_Value v, char* out, size_t size) {
 }
 
 // Helper: check if reader has errors
-static bool has_error(sj_Reader* r) {
+static bool has_error(sj_Reader *r) {
     return r && r->error;
 }
 
 // Helper: get error message with location
-static char* get_error_info(sj_Reader* r, char* out, size_t size) {
+static char *get_error_info(sj_Reader *r, char *out, size_t size) {
     if (!has_error(r)) {
         strncpy(out, "No error", size - 1);
         out[size - 1] = '\0';
@@ -63,7 +63,7 @@ static char* get_error_info(sj_Reader* r, char* out, size_t size) {
 }
 
 // Helper: find value by key in object
-static sj_Value find_in_obj(sj_Reader* r, sj_Value obj, const char* key) {
+static sj_Value find_in_obj(sj_Reader *r, sj_Value obj, const char *key) {
     if (has_error(r)) return (sj_Value){ .type = SJ_ERROR };
 
     sj_Value k, v;
@@ -75,7 +75,7 @@ static sj_Value find_in_obj(sj_Reader* r, sj_Value obj, const char* key) {
 }
 
 // Helper: find nested value by path
-static sj_Value find_by_path(sj_Reader* r, const char* response, const char* path[], int depth) {
+static sj_Value find_by_path(sj_Reader *r, const char *response, const char *path[], int depth) {
     *r = sj_reader((char*)response, strlen(response));
     sj_Value v = sj_read(r);
     if (v.type == SJ_ERROR || r->error) return (sj_Value){ .type = SJ_ERROR };
@@ -101,13 +101,13 @@ static sj_Value find_by_path(sj_Reader* r, const char* response, const char* pat
 }
 
 // Build JSON using string operations (sj.h is for parsing, not building)
-char* json_request(const Agent* agent, const Config* config, char* out, size_t size) {
-    static const char* tools =
+char *json_request(const Agent *agent, const Config *config, char *out, size_t size) {
+    static const char *tools =
         "[{\"type\":\"function\",\"function\":{\"name\":\"execute_command\",\"description\":\"Execute shell command\",\"parameters\":{\"type\":\"object\",\"properties\":{\"command\":{\"type\":\"string\"}},\"required\":[\"command\"]}}},"
         "{\"type\":\"function\",\"function\":{\"name\":\"extract_skill\",\"description\":\"Extract content from SKILL.md file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"skill_name\":{\"type\":\"string\"}},\"required\":[\"skill_name\"]}}},"
         "{\"type\":\"function\",\"function\":{\"name\":\"execute_skill\",\"description\":\"Execute skill script with format: 'skill_name script_name [arguments]'. Script name should not include file extension.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"skill_command\":{\"type\":\"string\"}},\"required\":[\"skill_command\"]}}}]";
 
-    char* p = out;
+    char *p = out;
 
     // Header
     p += snprintf(p, size - (p - out),
@@ -117,7 +117,7 @@ char* json_request(const Agent* agent, const Config* config, char* out, size_t s
 
     // Messages
     for (int i = 0; i < agent->msg_count; i++) {
-        const Message* m = &agent->messages[i];
+        const Message *m = &agent->messages[i];
         if (i) p += snprintf(p, size - (p - out), ",");
 
         if (strcmp(m->role, "tool") == 0) {
@@ -142,7 +142,7 @@ char* json_request(const Agent* agent, const Config* config, char* out, size_t s
                 m->role, m->content[0] ? "\"" : "", m->tool_calls);
             if (m->content[0]) {
                 // Fix missing quote
-                char* comma = strrchr(p, ',');
+                char *comma = strrchr(p, ',');
                 if (comma) memmove(comma, comma - 1, strlen(comma) + 2);
             }
         }
@@ -162,9 +162,9 @@ char* json_request(const Agent* agent, const Config* config, char* out, size_t s
     return out;
 }
 
-char* json_content(const char* response, char* out, size_t size) {
+char *json_content(const char *response, char *out, size_t size) {
     sj_Reader r;
-    const char* path[] = {"choices", "0", "message", "content"};
+    const char *path[] = {"choices", "0", "message", "content"};
     sj_Value v = find_by_path(&r, response, path, 4);
 
     if (v.type == SJ_NULL) {
@@ -176,14 +176,14 @@ char* json_content(const char* response, char* out, size_t size) {
     return v.type != SJ_ERROR ? out : NULL;
 }
 
-char* json_error(const char* response, char* out, size_t size) {
+char *json_error(const char *response, char *out, size_t size) {
     sj_Reader r;
-    const char* path[] = {"error", "message"};
+    const char *path[] = {"error", "message"};
     sj_Value v = find_by_path(&r, response, path, 2);
     return get_str(v, out, size) ? out : NULL;
 }
 
-int extract_command(const char* response, char* cmd, size_t cmd_size) {
+int extract_command(const char *response, char *cmd, size_t cmd_size) {
     sj_Reader r = sj_reader((char*)response, strlen(response));
     sj_Value root = sj_read(&r);
     if (root.type == SJ_ERROR || r.error) return 0;
@@ -219,7 +219,7 @@ int extract_command(const char* response, char* cmd, size_t cmd_size) {
     return strlen(cmd) > 0;
 }
 
-int extract_tool_calls(const char* response, char* output, size_t output_size, const ToolExtractor* extractor) {
+int extract_tool_calls(const char *response, char *output, size_t output_size, const ToolExtractor *extractor) {
     sj_Reader r = sj_reader((char*)response, strlen(response));
     sj_Value root = sj_read(&r);
     if (root.type == SJ_ERROR || r.error) return 0;
@@ -234,7 +234,7 @@ int extract_tool_calls(const char* response, char* output, size_t output_size, c
     sj_Value tool_calls = find_in_obj(&r, message, "tool_calls");
     if (tool_calls.type != SJ_ARRAY) return 0;
 
-    const char* type = extractor ? extractor->type : "all";
+    const char *type = extractor ? extractor->type : "all";
 
     if (strcmp(type, "all") == 0) {
         // Return raw tool_calls JSON substring

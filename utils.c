@@ -2,7 +2,7 @@
 
 extern Config config;
 
-static void format_providers(const char* providers, char* out, size_t size) {
+static void format_providers(const char *providers, char *out, size_t size) {
     if (!providers || !out) return;
 
     char buf[256];
@@ -18,7 +18,7 @@ static void format_providers(const char* providers, char* out, size_t size) {
     }
 }
 
-int http_request(const char* req, char* resp, size_t resp_size) {
+int http_request(const char *req, char *resp, size_t resp_size) {
     char temp[] = "/tmp/ai_req_XXXXXX";
     int fd = mkstemp(temp);
     if (fd == -1) return -1;
@@ -32,7 +32,7 @@ int http_request(const char* req, char* resp, size_t resp_size) {
     char curl[MAX_BUFFER];
     snprintf(curl, sizeof(curl), curl_template, config.api_key, temp);
 
-    FILE* pipe = popen(curl, "r");
+    FILE *pipe = popen(curl, "r");
     if (!pipe) { unlink(temp); return -1; }
 
     size_t bytes = fread(resp, 1, resp_size - 1, pipe);
@@ -51,16 +51,16 @@ void load_config(void) {
     strcpy(config.op_providers, "cerebras");
     config.op_providers_on = 1;
 
-    char* key = getenv("AGENTC_API_KEY");
+    char *key = getenv("AGENTC_API_KEY");
     if (key) strncpy(config.api_key, key, 127);
 
-    char* url = getenv("AGENTC_BASE_URL");
+    char *url = getenv("AGENTC_BASE_URL");
     if (url) strncpy(config.base_url, url, 255);
 
-    char* model = getenv("AGENTC_MODEL");
+    char *model = getenv("AGENTC_MODEL");
     if (model) strncpy(config.model, model, 63);
 
-    char* op_provider = getenv("AGENTC_OP_PROVIDER");
+    char *op_provider = getenv("AGENTC_OP_PROVIDER");
     if (op_provider) {
         if (strcmp(op_provider, "false") == 0) {
             config.op_providers_on = 0;

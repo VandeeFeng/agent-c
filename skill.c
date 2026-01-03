@@ -2,17 +2,17 @@
 #include <sys/stat.h>
 #include <dirent.h>
 
-static int file_exists(const char* path) {
+static int file_exists(const char *path) {
     struct stat st;
     return stat(path, &st) == 0;
 }
 
-static int is_directory(const char* path) {
+static int is_directory(const char *path) {
     struct stat st;
     return stat(path, &st) == 0 && S_ISDIR(st.st_mode);
 }
 
-static void build_skill_path(const char* skill_name, const char* script_name, char* path, size_t path_size) {
+static void build_skill_path(const char *skill_name, const char *script_name, char *path, size_t path_size) {
     if (script_name) {
         snprintf(path, path_size, "%s/.agent-c/skills/%s/scripts/%s", getenv("HOME"), skill_name, script_name);
     } else {
@@ -20,8 +20,8 @@ static void build_skill_path(const char* skill_name, const char* script_name, ch
     }
 }
 
-static int parse_and_validate_command(const char* skill_command, char* skill_name,
-                                      char* script_name, char* args, char* resolved_path, size_t path_size) {
+static int parse_and_validate_command(const char *skill_command, char *skill_name,
+                                      char *script_name, char *args, char *resolved_path, size_t path_size) {
     if (!skill_command || !skill_name || !script_name) {
         return -1;
     }
@@ -31,8 +31,8 @@ static int parse_and_validate_command(const char* skill_command, char* skill_nam
     strncpy(cmd_copy, skill_command, sizeof(cmd_copy) - 1);
     cmd_copy[sizeof(cmd_copy) - 1] = '\0';
 
-    char* cmd = trim(cmd_copy);
-    char* token = strtok(cmd, " \t");
+    char *cmd = trim(cmd_copy);
+    char *token = strtok(cmd, " \t");
     if (!token) {
         return -1;
     }
@@ -68,7 +68,7 @@ static int parse_and_validate_command(const char* skill_command, char* skill_nam
     }
 
     if (resolved_path && path_size > 0) {
-        const char* extensions[] = {".sh", ".py", ".js"};
+        const char *extensions[] = {".sh", ".py", ".js"};
         const int ext_count = sizeof(extensions) / sizeof(extensions[0]);
 
         for (int i = 0; i < ext_count; i++) {
@@ -88,7 +88,7 @@ static int parse_and_validate_command(const char* skill_command, char* skill_nam
     return 0;
 }
 
-static int extract_skill_description(const char* skill_name, char* description, size_t desc_size) {
+static int extract_skill_description(const char *skill_name, char *description, size_t desc_size) {
     if (!skill_name || !description || desc_size == 0) {
         return -1;
     }
@@ -109,7 +109,7 @@ static int extract_skill_description(const char* skill_name, char* description, 
         return -3;
     }
 
-    FILE* file = fopen(md_path, "r");
+    FILE *file = fopen(md_path, "r");
     if (!file) {
         return -3;
     }
@@ -125,7 +125,7 @@ static int extract_skill_description(const char* skill_name, char* description, 
         }
 
         if (strstr(line, "Description:") || strstr(line, "DESCRIPTION:")) {
-            char* desc_start = strchr(line, ':');
+            char *desc_start = strchr(line, ':');
             if (desc_start) {
                 desc_start++;
                 while (*desc_start == ' ') desc_start++;
@@ -153,7 +153,7 @@ static int extract_skill_description(const char* skill_name, char* description, 
 }
 
 
-int discover_skills(char* skills_list, size_t list_size) {
+int discover_skills(char *skills_list, size_t list_size) {
     if (!skills_list || list_size == 0) {
         return -1;
     }
@@ -168,12 +168,12 @@ int discover_skills(char* skills_list, size_t list_size) {
         return 0;
     }
 
-    DIR* dir = opendir(skills_dir);
+    DIR *dir = opendir(skills_dir);
     if (!dir) {
         return 0;
     }
 
-    struct dirent* entry;
+    struct dirent *entry;
     while ((entry = readdir(dir)) != NULL) {
         if (entry->d_name[0] == '.') {
             continue;
@@ -218,7 +218,7 @@ int discover_skills(char* skills_list, size_t list_size) {
     return skill_count;
 }
 
-int extract_skill(const char* skill_name, char* skill_content, size_t content_size) {
+int extract_skill(const char *skill_name, char *skill_content, size_t content_size) {
     if (!skill_name || !skill_content || content_size == 0) {
         return -1;
     }
@@ -242,7 +242,7 @@ int extract_skill(const char* skill_name, char* skill_content, size_t content_si
         return -2;
     }
 
-    FILE* file = fopen(md_path, "r");
+    FILE *file = fopen(md_path, "r");
     if (!file) {
         return -3;
     }
@@ -254,7 +254,7 @@ int extract_skill(const char* skill_name, char* skill_content, size_t content_si
     return bytes_read > 0 ? 0 : -3;
 }
 
-int execute_skill(const char* skill_command, char* result, size_t result_size) {
+int execute_skill(const char *skill_command, char *result, size_t result_size) {
     if (!skill_command || !result || result_size == 0) {
         return -1;
     }
@@ -273,7 +273,7 @@ int execute_skill(const char* skill_command, char* result, size_t result_size) {
     }
 
     char temp_path[64];
-    const char* temp_template = "/tmp/ai_skill_XXXXXX";
+    const char *temp_template = "/tmp/ai_skill_XXXXXX";
     strncpy(temp_path, temp_template, sizeof(temp_path) - 1);
     temp_path[sizeof(temp_path) - 1] = '\0';
 
@@ -295,7 +295,7 @@ int execute_skill(const char* skill_command, char* result, size_t result_size) {
 
     int exit_code = system(exec_cmd);
 
-    FILE* temp_file = fopen(temp_path, "r");
+    FILE *temp_file = fopen(temp_path, "r");
     int read_result = -1;
     if (temp_file) {
         size_t bytes_read = fread(result, 1, result_size - 1, temp_file);
@@ -313,12 +313,12 @@ int execute_skill(const char* skill_command, char* result, size_t result_size) {
     return (exit_code == 0) ? 0 : -1;
 }
 
-int extract_skill_name(const char* response, char* skill_name, size_t name_size) {
+int extract_skill_name(const char *response, char *skill_name, size_t name_size) {
     static const ToolExtractor extractor = {"param", "extract_skill", "skill_name"};
     return extract_tool_calls(response, skill_name, name_size, &extractor);
 }
 
-int extract_skill_command(const char* response, char* skill_command, size_t cmd_size) {
+int extract_skill_command(const char *response, char *skill_command, size_t cmd_size) {
     static const ToolExtractor extractor = {"param", "execute_skill", "skill_command"};
     return extract_tool_calls(response, skill_command, cmd_size, &extractor);
 }
