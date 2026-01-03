@@ -6,15 +6,11 @@ static void format_providers(const char *providers, char *out, size_t size) {
     if (!providers || !out) return;
 
     char buf[256];
-    strncpy(buf, providers, sizeof(buf) - 1);
-    buf[sizeof(buf) - 1] = '\0';
+    snprintf(buf, sizeof(buf), "%s", providers);
 
-    out[0] = '\0';
-    for (char *p = buf, *token; (token = strtok(p, ",")); p = NULL) {
-        if (out[0]) strcat(out, ",");
-        strcat(out, "\"");
-        strcat(out, trim(token));
-        strcat(out, "\"");
+    char *p = out;
+    for (char *tok, *tmp = buf; (tok = strtok(tmp, ",")); tmp = NULL) {
+        p += snprintf(p, out + size - p, "%s\"%s\"", p == out ? "" : ",", trim(tok));
     }
 }
 
@@ -52,20 +48,20 @@ void load_config(void) {
     config.op_providers_on = 1;
 
     char *key = getenv("AGENTC_API_KEY");
-    if (key) strncpy(config.api_key, key, 127);
+    if (key) snprintf(config.api_key, sizeof(config.api_key), "%s", key);
 
     char *url = getenv("AGENTC_BASE_URL");
-    if (url) strncpy(config.base_url, url, 255);
+    if (url) snprintf(config.base_url, sizeof(config.base_url), "%s", url);
 
     char *model = getenv("AGENTC_MODEL");
-    if (model) strncpy(config.model, model, 63);
+    if (model) snprintf(config.model, sizeof(config.model), "%s", model);
 
     char *op_provider = getenv("AGENTC_OP_PROVIDER");
     if (op_provider) {
         if (strcmp(op_provider, "false") == 0) {
             config.op_providers_on = 0;
         } else {
-            strncpy(config.op_providers, op_provider, 255);
+            snprintf(config.op_providers, sizeof(config.op_providers), "%s", op_provider);
             config.op_providers_on = 1;
         }
     }

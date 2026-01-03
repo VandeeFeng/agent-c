@@ -26,12 +26,12 @@ static char *get_str(sj_Value v, char *out, size_t size) {
     for (const char *src = v.start; src < v.end && dst < out + len;) {
         if (*src == '\\' && src + 1 < v.end) {
             switch (*++src) {
-                case 'n': *dst++ = '\n'; break;
-                case 't': *dst++ = '\t'; break;
-                case 'r': *dst++ = '\r'; break;
-                case '\\': *dst++ = '\\'; break;
-                case '"': *dst++ = '"'; break;
-                default: *dst++ = *src; break;
+            case 'n': *dst++ = '\n'; break;
+            case 't': *dst++ = '\t'; break;
+            case 'r': *dst++ = '\r'; break;
+            case '\\': *dst++ = '\\'; break;
+            case '"': *dst++ = '"'; break;
+            default: *dst++ = *src; break;
             }
             src++;
         } else {
@@ -50,8 +50,7 @@ static bool has_error(sj_Reader *r) {
 // Helper: get error message with location
 static char *get_error_info(sj_Reader *r, char *out, size_t size) {
     if (!has_error(r)) {
-        strncpy(out, "No error", size - 1);
-        out[size - 1] = '\0';
+        snprintf(out, size, "No error");
         return out;
     }
 
@@ -111,9 +110,9 @@ char *json_request(const Agent *agent, const Config *config, char *out, size_t s
 
     // Header
     p += snprintf(p, size - (p - out),
-        "{\"model\":\"%s\",\"temperature\":%g,\"max_tokens\":%d,\"stream\":false,"
-        "\"tool_choice\":\"auto\",\"tools\":%s,\"messages\":[",
-        config->model, config->temp, config->max_tokens, tools);
+                  "{\"model\":\"%s\",\"temperature\":%g,\"max_tokens\":%d,\"stream\":false,"
+                  "\"tool_choice\":\"auto\",\"tools\":%s,\"messages\":[",
+                  config->model, config->temp, config->max_tokens, tools);
 
     // Messages
     for (int i = 0; i < agent->msg_count; i++) {
@@ -133,13 +132,13 @@ char *json_request(const Agent *agent, const Config *config, char *out, size_t s
                 }
             }
             p += snprintf(p, size - (p - out),
-                "{\"role\":\"%s\",\"content\":\"%s\",\"tool_call_id\":\"%s\"}",
-                m->role, m->content, id);
+                          "{\"role\":\"%s\",\"content\":\"%s\",\"tool_call_id\":\"%s\"}",
+                          m->role, m->content, id);
         }
         else if (strcmp(m->role, "assistant") == 0 && m->tool_calls[0]) {
             p += snprintf(p, size - (p - out),
-                "{\"role\":\"%s\",\"content\":%s,\"tool_calls\":%s}",
-                m->role, m->content[0] ? "\"" : "", m->tool_calls);
+                          "{\"role\":\"%s\",\"content\":%s,\"tool_calls\":%s}",
+                          m->role, m->content[0] ? "\"" : "", m->tool_calls);
             if (m->content[0]) {
                 // Fix missing quote
                 char *comma = strrchr(p, ',');
@@ -148,7 +147,7 @@ char *json_request(const Agent *agent, const Config *config, char *out, size_t s
         }
         else {
             p += snprintf(p, size - (p - out),
-                "{\"role\":\"%s\",\"content\":\"%s\"}", m->role, m->content);
+                          "{\"role\":\"%s\",\"content\":\"%s\"}", m->role, m->content);
         }
     }
 
@@ -208,6 +207,7 @@ int extract_command(const char *response, char *cmd, size_t cmd_size) {
     // Parse arguments string and extract command
     char args_str[512];
     get_str(arguments, args_str, sizeof(args_str));
+    if (!*args_str) return 0;
 
     sj_Reader ar = sj_reader(args_str, strlen(args_str));
     sj_Value args_obj = sj_read(&ar);
@@ -237,13 +237,11 @@ int extract_tool_calls(const char *response, char *output, size_t output_size, c
     const char *type = extractor ? extractor->type : "all";
 
     if (strcmp(type, "all") == 0) {
-        // Return raw tool_calls JSON substring
         size_t len = tool_calls.end - tool_calls.start;
-        if (len < output_size) {
-            memcpy(output, tool_calls.start, len);
-            output[len] = '\0';
-            return 1;
-        }
+        if (len >= output_size) return 0;
+        memcpy(output, tool_calls.start, len);
+        output[len] = '\0';
+        return 1;
     }
     else {
         sj_Value tool_call;
@@ -264,6 +262,7 @@ int extract_tool_calls(const char *response, char *output, size_t output_size, c
 
                 char args_str[512];
                 get_str(arguments, args_str, sizeof(args_str));
+                if (!*args_str) return 0;
 
                 sj_Reader ar = sj_reader(args_str, strlen(args_str));
                 sj_Value args_obj = sj_read(&ar);
@@ -271,7 +270,7 @@ int extract_tool_calls(const char *response, char *output, size_t output_size, c
 
                 sj_Value param = find_in_obj(&ar, args_obj, extractor->param_name);
                 if (!get_str(param, output, output_size)) return 0;
-                return strlen(output) > 0;
+                return *output > 0;
             }
         }
     }

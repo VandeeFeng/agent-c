@@ -44,12 +44,10 @@ static void add_message(const char *role, const char *content, const char *tool_
     if (agent.msg_count >= MAX_MESSAGES - 1) return;
 
     strcpy(agent.messages[agent.msg_count].role, role);
-    strncpy(agent.messages[agent.msg_count].content, content, MAX_CONTENT - 1);
-    agent.messages[agent.msg_count].content[MAX_CONTENT - 1] = '\0';
+    snprintf(agent.messages[agent.msg_count].content, MAX_CONTENT, "%s", content);
 
-    if (tool_calls && strlen(tool_calls) > 0) {
-        strncpy(agent.messages[agent.msg_count].tool_calls, tool_calls, MAX_CONTENT - 1);
-        agent.messages[agent.msg_count].tool_calls[MAX_CONTENT - 1] = '\0';
+    if (tool_calls && *tool_calls) {
+        snprintf(agent.messages[agent.msg_count].tool_calls, MAX_CONTENT, "%s", tool_calls);
     } else {
         agent.messages[agent.msg_count].tool_calls[0] = '\0';
     }
@@ -82,8 +80,7 @@ int execute_command(const char *response) {
 
         if (result == 0) {
             char current_system[MAX_CONTENT];
-            strncpy(current_system, agent.messages[0].content, MAX_CONTENT - 1);
-            current_system[MAX_CONTENT - 1] = '\0';
+            snprintf(current_system, MAX_CONTENT, "%s", agent.messages[0].content);
 
             snprintf(agent.messages[0].content, MAX_CONTENT,
                      "%s\n\n=== SKILL: %s ===\n%s\n=== END SKILL ===\n",
@@ -110,9 +107,9 @@ int execute_command(const char *response) {
         int result = execute_skill(skill_command, skill_result, sizeof(skill_result));
 
         if (result == 0) {
-            if (strlen(skill_result) > 0) {
+            if (*skill_result) {
                 printf("%s", skill_result);
-                if (skill_result[strlen(skill_result)-1] != '\n') printf("\n");
+                printf(skill_result[strlen(skill_result)-1] != '\n' ? "\n" : "");
             }
         } else {
             printf("\033[31mError: Failed to execute skill command '%s' (code: %d)\033[0m\n", skill_command, result);
@@ -148,9 +145,9 @@ int execute_command(const char *response) {
             size_t bytes = fread(result, 1, MAX_CONTENT - 1, f);
             result[bytes] = '\0';
             fclose(f);
-            if (bytes > 0) {
+            if (bytes) {
                 printf("%s", result);
-                if (result[bytes-1] != '\n') printf("\n");
+                printf(result[bytes-1] != '\n' ? "\n" : "");
             }
         }
         unlink(temp);
@@ -186,7 +183,7 @@ int process_agent(const char *task) {
         static const ToolExtractor extractor = {"all"};
         extract_tool_calls(resp, tool_calls, sizeof(tool_calls), &extractor);
 
-        if (strlen(tool_calls) > 0) {
+        if (*tool_calls) {
             add_message("assistant", assistant_content, tool_calls);
         }
 

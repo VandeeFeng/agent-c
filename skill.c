@@ -2,6 +2,9 @@
 #include <sys/stat.h>
 #include <dirent.h>
 
+#define SAFE_STRCPY(dst, src) snprintf(dst, sizeof(dst), "%s", src)
+#define IS_EMPTY_STR(s) (!(s) || !*(s))
+
 static int file_exists(const char *path) {
     struct stat st;
     return stat(path, &st) == 0;
@@ -26,43 +29,32 @@ static int parse_and_validate_command(const char *skill_command, char *skill_nam
         return -1;
     }
 
-    // Parse command
     char cmd_copy[MAX_CONTENT];
-    strncpy(cmd_copy, skill_command, sizeof(cmd_copy) - 1);
-    cmd_copy[sizeof(cmd_copy) - 1] = '\0';
+    SAFE_STRCPY(cmd_copy, skill_command);
 
     char *cmd = trim(cmd_copy);
     char *token = strtok(cmd, " \t");
-    if (!token) {
-        return -1;
-    }
+    if (!token) return -1;
 
-    strncpy(skill_name, token, MAX_SKILL_NAME - 1);
-    skill_name[MAX_SKILL_NAME - 1] = '\0';
+    SAFE_STRCPY(skill_name, token);
 
     token = strtok(NULL, " \t");
-    if (!token) {
-        return -1;
-    }
+    if (!token) return -1;
 
-    strncpy(script_name, token, MAX_SKILL_NAME - 1);
-    script_name[MAX_SKILL_NAME - 1] = '\0';
+    SAFE_STRCPY(script_name, token);
 
     if (args) {
         args[0] = '\0';
         token = strtok(NULL, "");
-        if (token) {
-            strncpy(args, token, MAX_CONTENT - 1);
-            args[MAX_CONTENT - 1] = '\0';
-        }
+        if (token) SAFE_STRCPY(args, token);
     }
 
-    if (!skill_name || strlen(skill_name) == 0 || strlen(skill_name) >= MAX_SKILL_NAME ||
+    if (IS_EMPTY_STR(skill_name) || strlen(skill_name) >= MAX_SKILL_NAME ||
         strchr(skill_name, '/') || strchr(skill_name, '\\')) {
         return -2;
     }
 
-    if (!script_name || strlen(script_name) == 0 || strlen(script_name) >= MAX_SKILL_NAME ||
+    if (IS_EMPTY_STR(script_name) || strlen(script_name) >= MAX_SKILL_NAME ||
         strchr(script_name, '/') || strchr(script_name, '\\')) {
         return -4;
     }
@@ -120,34 +112,25 @@ static int extract_skill_description(const char *skill_name, char *description, 
     while (fgets(line, sizeof(line), file) && !found_description) {
         line[strcspn(line, "\n")] = '\0';
 
-        if (strlen(line) == 0 || line[0] == '#') {
-            continue;
-        }
+        if (!*line || line[0] == '#') continue;
 
         if (strstr(line, "Description:") || strstr(line, "DESCRIPTION:")) {
             char *desc_start = strchr(line, ':');
             if (desc_start) {
                 desc_start++;
                 while (*desc_start == ' ') desc_start++;
-                strncpy(description, desc_start, desc_size - 1);
-                description[desc_size - 1] = '\0';
+                SAFE_STRCPY(description, desc_start);
                 found_description = 1;
                 break;
             }
         }
 
-        if (strlen(description) == 0) {
-            strncpy(description, line, desc_size - 1);
-            description[desc_size - 1] = '\0';
-        }
+        if (!*description) SAFE_STRCPY(description, line);
     }
 
     fclose(file);
 
-    // Fallback to skill name if no description found
-    if (strlen(description) == 0) {
-        snprintf(description, desc_size, "Skill: %s", skill_name);
-    }
+    if (!*description) snprintf(description, desc_size, "Skill: %s", skill_name);
 
     return 0;
 }
@@ -186,7 +169,7 @@ int discover_skills(char *skills_list, size_t list_size) {
             continue;
         }
 
-        if (!entry->d_name || strlen(entry->d_name) == 0 || strlen(entry->d_name) >= MAX_SKILL_NAME ||
+        if (!entry->d_name || !*(entry->d_name) || strlen(entry->d_name) >= MAX_SKILL_NAME ||
             strchr(entry->d_name, '/') || strchr(entry->d_name, '\\')) {
             continue;
         }
@@ -204,12 +187,8 @@ int discover_skills(char *skills_list, size_t list_size) {
         char skill_entry[MAX_SKILL_PATH];
         snprintf(skill_entry, sizeof(skill_entry), "- %s: %s\n", entry->d_name, description);
 
-        if (skill_count == 0) {
-            strncpy(skills_list, skill_entry, list_size - 1);
-            skills_list[list_size - 1] = '\0';
-        } else {
-            strncat(skills_list, skill_entry, list_size - strlen(skills_list) - 1);
-        }
+        snprintf(skills_list + strlen(skills_list), list_size - strlen(skills_list),
+                 "%s%s", skill_count ? "" : "", skill_entry);
 
         skill_count++;
     }
@@ -219,11 +198,9 @@ int discover_skills(char *skills_list, size_t list_size) {
 }
 
 int extract_skill(const char *skill_name, char *skill_content, size_t content_size) {
-    if (!skill_name || !skill_content || content_size == 0) {
-        return -1;
-    }
+    if (!skill_name || !skill_content || !content_size) return -1;
 
-    if (!skill_name || strlen(skill_name) == 0 || strlen(skill_name) >= MAX_SKILL_NAME ||
+    if (IS_EMPTY_STR(skill_name) || strlen(skill_name) >= MAX_SKILL_NAME ||
         strchr(skill_name, '/') || strchr(skill_name, '\\')) {
         return -1;
     }
@@ -273,9 +250,7 @@ int execute_skill(const char *skill_command, char *result, size_t result_size) {
     }
 
     char temp_path[64];
-    const char *temp_template = "/tmp/ai_skill_XXXXXX";
-    strncpy(temp_path, temp_template, sizeof(temp_path) - 1);
-    temp_path[sizeof(temp_path) - 1] = '\0';
+    SAFE_STRCPY(temp_path, "/tmp/ai_skill_XXXXXX");
 
     int fd = mkstemp(temp_path);
     if (fd == -1) {
