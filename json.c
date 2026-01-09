@@ -21,7 +21,6 @@ static char *get_str(sj_Value v, char *out, size_t size) {
     size_t len = v.end - v.start;
     if (len >= size) len = size - 1;
 
-    // Copy and unescape in one pass
     char *dst = out;
     for (const char *src = v.start; src < v.end && dst < out + len;) {
         if (*src == '\\' && src + 1 < v.end) {
@@ -45,20 +44,6 @@ static char *get_str(sj_Value v, char *out, size_t size) {
 // Helper: check if reader has errors
 static bool has_error(sj_Reader *r) {
     return r && r->error;
-}
-
-// Helper: get error message with location
-static char *get_error_info(sj_Reader *r, char *out, size_t size) {
-    if (!has_error(r)) {
-        snprintf(out, size, "No error");
-        return out;
-    }
-
-    int line, col;
-    sj_location(r, &line, &col);
-    snprintf(out, size, "JSON error at line %d, column %d: %s",
-             line, col, r->error);
-    return out;
 }
 
 // Helper: find value by key in object
@@ -99,7 +84,52 @@ static sj_Value find_by_path(sj_Reader *r, const char *response, const char *pat
     return v;
 }
 
-// Build JSON using string operations (sj.h is for parsing, not building)
+static char *extract_tool_call_id(const char *tool_calls, char *id, size_t id_size) {
+    sj_Reader tr = sj_reader((char*)tool_calls, strlen(tool_calls));
+    sj_Value arr = sj_read(&tr);
+    id[0] = '\0';
+
+    if (arr.type == SJ_ARRAY) {
+        sj_Value tool;
+        if (sj_iter_array(&tr, arr, &tool)) {
+            sj_Value id_val = find_in_obj(&tr, tool, "id");
+            get_str(id_val, id, id_size);
+        }
+    }
+    return id;
+}
+
+static char *format_tool_message(const Message *m, char *out, size_t size) {
+    char id[64] = "";
+    extract_tool_call_id(m->tool_calls, id, sizeof(id));
+    snprintf(out, size, "{\"role\":\"%s\",\"content\":\"%s\",\"tool_call_id\":\"%s\"}",
+             m->role, m->content, id);
+    return out;
+}
+
+static char *format_assistant_with_tools(const Message *m, char *out, size_t size) {
+    snprintf(out, size,
+             "{\"role\":\"%s\",\"content\":%s,\"tool_calls\":%s}",
+             m->role, m->content[0] ? "\"" : "", m->tool_calls);
+
+    if (m->content[0]) {
+        char *comma = strrchr(out, ',');
+        if (comma) memmove(comma, comma - 1, strlen(comma) + 2);
+    }
+    return out;
+}
+
+static char *format_message(const Message *m, char *out, size_t size) {
+    if (strcmp(m->role, "tool") == 0) {
+        return format_tool_message(m, out, size);
+    } else if (strcmp(m->role, "assistant") == 0 && m->tool_calls[0]) {
+        return format_assistant_with_tools(m, out, size);
+    } else {
+        snprintf(out, size, "{\"role\":\"%s\",\"content\":\"%s\"}", m->role, m->content);
+        return out;
+    }
+}
+
 char *json_request(const Agent *agent, const Config *config, char *out, size_t size) {
     static const char *tools =
         "[{\"type\":\"function\",\"function\":{\"name\":\"execute_command\",\"description\":\"Execute shell command\",\"parameters\":{\"type\":\"object\",\"properties\":{\"command\":{\"type\":\"string\"}},\"required\":[\"command\"]}}},"
@@ -108,50 +138,17 @@ char *json_request(const Agent *agent, const Config *config, char *out, size_t s
 
     char *p = out;
 
-    // Header
     p += snprintf(p, size - (p - out),
                   "{\"model\":\"%s\",\"temperature\":%g,\"max_tokens\":%d,\"stream\":false,"
                   "\"tool_choice\":\"auto\",\"tools\":%s,\"messages\":[",
                   config->model, config->temp, config->max_tokens, tools);
 
-    // Messages
     for (int i = 0; i < agent->msg_count; i++) {
-        const Message *m = &agent->messages[i];
         if (i) p += snprintf(p, size - (p - out), ",");
-
-        if (strcmp(m->role, "tool") == 0) {
-            // Extract tool_call_id from tool_calls
-            sj_Reader tr = sj_reader((char*)m->tool_calls, strlen(m->tool_calls));
-            sj_Value arr = sj_read(&tr);
-            char id[64] = "";
-            if (arr.type == SJ_ARRAY) {
-                sj_Value tool;
-                if (sj_iter_array(&tr, arr, &tool)) {
-                    sj_Value id_val = find_in_obj(&tr, tool, "id");
-                    get_str(id_val, id, sizeof(id));
-                }
-            }
-            p += snprintf(p, size - (p - out),
-                          "{\"role\":\"%s\",\"content\":\"%s\",\"tool_call_id\":\"%s\"}",
-                          m->role, m->content, id);
-        }
-        else if (strcmp(m->role, "assistant") == 0 && m->tool_calls[0]) {
-            p += snprintf(p, size - (p - out),
-                          "{\"role\":\"%s\",\"content\":%s,\"tool_calls\":%s}",
-                          m->role, m->content[0] ? "\"" : "", m->tool_calls);
-            if (m->content[0]) {
-                // Fix missing quote
-                char *comma = strrchr(p, ',');
-                if (comma) memmove(comma, comma - 1, strlen(comma) + 2);
-            }
-        }
-        else {
-            p += snprintf(p, size - (p - out),
-                          "{\"role\":\"%s\",\"content\":\"%s\"}", m->role, m->content);
-        }
+        char msg_buf[MAX_CONTENT];
+        p += snprintf(p, size - (p - out), "%s", format_message(&agent->messages[i], msg_buf, sizeof(msg_buf)));
     }
 
-    // Footer
     p += snprintf(p, size - (p - out), "]");
     if (config->op_providers_on && config->op_providers_json[0]) {
         p += snprintf(p, size - (p - out), ",\"provider\":%s", config->op_providers_json);

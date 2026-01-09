@@ -8,6 +8,7 @@ void run_cli(void) {
         fflush(stdout);
 
         if (!fgets(input, sizeof(input), stdin)) break;
+
         char *nl = strchr(input, '\n');
         if (nl) *nl = '\0';
 

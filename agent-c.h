@@ -83,4 +83,7 @@ int discover_skills(char *skills_list, size_t list_size);
 int extract_skill(const char *skill_name, char *skill_content, size_t content_size);
 int execute_skill(const char *skill_command, char *result, size_t result_size);
 
+// Helper functions
+int validate_skill_name(const char *name);
+
 #endif
